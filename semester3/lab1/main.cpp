@@ -1,14 +1,16 @@
 #include <iostream>
 
+using namespace std;
+
+#define N 2
+
 class Complex {
 private:
     double real;
     double imag;
 
 public:
-
-    Complex() : real(0), imag(0) {}
-    Complex(double r, double i) : real(r), imag(i) {}
+    Complex(double r = 0.0, double i = 0.0) : real(r), imag(i) {}
 
     double getReal() const { return real; }
     double getImag() const { return imag; }
@@ -22,255 +24,114 @@ public:
     }
 
     Complex operator*(const Complex& other) const {
-        return Complex((real * other.real) - (imag * other.imag), (real * other.imag) + (imag * other.real));
+        return Complex(real * other.real - imag * other.imag, real * other.imag + imag * other.real);
+    }
+
+    Complex operator/(const Complex& other) const {
+        double denominator = other.real * other.real + other.imag * other.imag;
+        return Complex((real * other.real + imag * other.imag) / denominator, (imag * other.real - real * other.imag) / denominator);
     }
 
     void print() const {
-        std::cout << real << " + " << imag << "i";
+        cout << real << " + " << imag << "i";
     }
 };
 
-class ComplexMatrix {
-private:
-    Complex** matrix;
-    int rows;
-    int cols;
+typedef Complex Matrix[N][N];
+typedef Complex Vector[N];
 
-public:
-
-    ComplexMatrix(int r, int c) : rows(r), cols(c) {
-        matrix = new Complex*[rows];
-        for (int i = 0; i < rows; ++i) {
-            matrix[i] = new Complex[cols];
-        }
-    }
-
-
-    // Конструктор копіювання (глибоке копіювання)
-    ComplexMatrix(const ComplexMatrix& other) : rows(other.rows), cols(other.cols) {
-        matrix = new Complex*[rows];
-        for (int i = 0; i < rows; ++i) {
-            matrix[i] = new Complex[cols];
-            for (int j = 0; j < cols; ++j) {
-                matrix[i][j] = other.matrix[i][j];
+// Function to perform LU decomposition
+void luDecomposition(const Matrix& A, Matrix& L, Matrix& U) {
+    for (int i = 0; i < N; i++) {
+        // Upper Triangular Matrix U
+        for (int k = i; k < N; k++) {
+            Complex sum(0, 0);
+            for (int j = 0; j < i; j++) {
+                sum = sum + L[i][j] * U[j][k];
             }
-        }
-    }
-
-    // Оператор присвоєння (глибоке копіювання)
-    ComplexMatrix& operator=(const ComplexMatrix& other) {
-        if (this == &other) return *this; // Захист від самоприсвоєння
-
-        // Звільнення старої пам'яті
-        for (int i = 0; i < rows; ++i) {
-            delete[] matrix[i];
-        }
-        delete[] matrix;
-
-        // Копіювання нових даних
-        rows = other.rows;
-        cols = other.cols;
-
-        matrix = new Complex*[rows];
-        for (int i = 0; i < rows; ++i) {
-            matrix[i] = new Complex[cols];
-            for (int j = 0; j < cols; ++j) {
-                matrix[i][j] = other.matrix[i][j];
-            }
+            U[i][k] = A[i][k] - sum;
         }
 
-        return *this;
-    }
-
-    ~ComplexMatrix() {
-        for (int i = 0; i < rows; ++i) {
-            delete[] matrix[i];
-        }
-        delete[] matrix;
-    }
-
-    ComplexMatrix operator+(const ComplexMatrix& other) const {
-        ComplexMatrix result(rows, cols);
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                result.setValue(i, j, matrix[i][j] + other.getValue(i, j));
-            }
-        }
-        return result;
-    }
-
-    ComplexMatrix operator-(const ComplexMatrix& other) const {
-        ComplexMatrix result(rows, cols);
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                result.setValue(i, j, matrix[i][j] - other.getValue(i, j));
-            }
-        }
-        return result;
-    }
-
-    ComplexMatrix operator*(const ComplexMatrix& other) const {
-        if (cols != other.rows) {
-            std::cerr << "Matrix dimensions do not match for multiplication!" << std::endl;
-            return ComplexMatrix(0, 0);
-        }
-        ComplexMatrix result(rows, cols);
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                Complex sum;
-                for (int k = 0; k < cols; ++k) {
-                    sum = sum + (getValue(i, k) * other.getValue(k, j));
+        // Lower Triangular Matrix L
+        for (int k = i; k < N; k++) {
+            if (i == k)
+                L[i][i] = Complex(1, 0);  // Diagonal as 1
+            else {
+                Complex sum(0, 0);
+                for (int j = 0; j < i; j++) {
+                    sum = sum + L[k][j] * U[j][i];
                 }
-                result.setValue(i, j, sum);
+                L[k][i] = (A[k][i] - sum) / U[i][i];
             }
-        }
-        return result;
-    }
-
-
-    void setValue(int r, int c, const Complex& value) {
-        if (r >= 0 && r < rows && c >= 0 && c < cols) {
-            matrix[r][c] = value;
         }
     }
+}
 
-    Complex getValue(int r, int c) const {
-        if (r >= 0 && r < rows && c >= 0 && c < cols) {
-            return matrix[r][c];
+// Function to solve system of equations using forward and backward substitution
+void solveLU(const Matrix& L, const Matrix& U, const Vector& b, Vector& x) {
+    Complex y[N];
+
+    // Forward substitution to solve L * y = b
+    for (int i = 0; i < N; i++) {
+        Complex sum(0, 0);
+        for (int j = 0; j < i; j++) {
+            sum = sum + L[i][j] * y[j];
         }
-        return Complex();
+        y[i] = b[i] - sum;
     }
 
-    void print() const {
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                matrix[i][j].print();
-                std::cout << " ";
-            }
-            std::cout << std::endl;
+    // Backward substitution to solve U * x = y
+    for (int i = N - 1; i >= 0; i--) {
+        Complex sum(0, 0);
+        for (int j = i + 1; j < N; j++) {
+            sum = sum + U[i][j] * x[j];
+        }
+        x[i] = (y[i] - sum) / U[i][i];
+    }
+}
+
+// Function to calculate the inverse of a matrix using LU decomposition
+void inverseMatrix(const Matrix& A, Matrix& inverse) {
+    Matrix L, U;
+    luDecomposition(A, L, U);
+
+    for (int i = 0; i < N; i++) {
+        Vector e = {Complex(0, 0)};
+        e[i] = Complex(1, 0);
+        Vector column;
+        solveLU(L, U, e, column);
+        for (int j = 0; j < N; j++) {
+            inverse[j][i] = column[j];
         }
     }
+}
 
-
-    ComplexMatrix strassenMultiply(const ComplexMatrix& other) const {
-        return strassenMultiply(*this, other);
+// Function to print a matrix
+void printMatrix(const Matrix& matrix) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            matrix[i][j].print();
+            cout << " ";
+        }
+        cout << endl;
     }
-
-private:
-    // Допоміжна функція для алгоритму Штрассена
-    ComplexMatrix strassenMultiply(const ComplexMatrix& A, const ComplexMatrix& B) const {
-        int n = A.rows; // Передбачається, що A і B квадратні
-        if (n == 1) {
-            // Базовий випадок
-            ComplexMatrix C(1, 1);
-            C.setValue(0, 0, A.getValue(0, 0) * B.getValue(0, 0));
-            return C;
-        }
-
-        int newSize = n / 2;
-
-        // Створення підматриць
-        ComplexMatrix A11(newSize, newSize);
-        ComplexMatrix A12(newSize, newSize);
-        ComplexMatrix A21(newSize, newSize);
-        ComplexMatrix A22(newSize, newSize);
-        ComplexMatrix B11(newSize, newSize);
-        ComplexMatrix B12(newSize, newSize);
-        ComplexMatrix B21(newSize, newSize);
-        ComplexMatrix B22(newSize, newSize);
-
-        // Заповнюємо підматриці
-        for (int i = 0; i < newSize; ++i) {
-            for (int j = 0; j < newSize; ++j) {
-                A11.setValue(i, j, A.getValue(i, j));
-                A12.setValue(i, j, A.getValue(i, j + newSize));
-                A21.setValue(i, j, A.getValue(i + newSize, j));
-                A22.setValue(i, j, A.getValue(i + newSize, j + newSize));
-
-                B11.setValue(i, j, B.getValue(i, j));
-                B12.setValue(i, j, B.getValue(i, j + newSize));
-                B21.setValue(i, j, B.getValue(i + newSize, j));
-                B22.setValue(i, j, B.getValue(i + newSize, j + newSize));
-            }
-        }
-
-        // Розрахунок M1, M2, M3, M4, M5, M6, M7
-        ComplexMatrix M1 = (A11 + A22).strassenMultiply(B11 + B22);
-        ComplexMatrix M2 = (A21 + A22).strassenMultiply(B11);
-        ComplexMatrix M3 = A11.strassenMultiply(B12 - B22);
-        ComplexMatrix M4 = A22.strassenMultiply(B21 - B11);
-        ComplexMatrix M5 = (A11 + A12).strassenMultiply(B22);
-        ComplexMatrix M6 = (A21 - A11).strassenMultiply(B11 + B12);
-        ComplexMatrix M7 = (A12 - A22).strassenMultiply(B21 + B22);
-
-        // Складання результатів
-        ComplexMatrix C(n, n);
-
-        // C11 = M1 + M4 - M5 + M7
-        for (int i = 0; i < newSize; ++i) {
-            for (int j = 0; j < newSize; ++j) {
-                C.setValue(i, j, M1.getValue(i, j) + M4.getValue(i, j) - M5.getValue(i, j) + M7.getValue(i, j));
-            }
-        }
-
-        // C12 = M3 + M5
-        for (int i = 0; i < newSize; ++i) {
-            for (int j = 0; j < newSize; ++j) {
-                C.setValue(i, j + newSize, M3.getValue(i, j) + M5.getValue(i, j));
-            }
-        }
-
-        // C21 = M2 + M4
-        for (int i = 0; i < newSize; ++i) {
-            for (int j = 0; j < newSize; ++j) {
-                C.setValue(i + newSize, j, M2.getValue(i, j) + M4.getValue(i, j));
-            }
-        }
-
-        // C22 = M1 - M2 + M3 + M6
-        for (int i = 0; i < newSize; ++i) {
-            for (int j = 0; j < newSize; ++j) {
-                C.setValue(i + newSize, j + newSize, M1.getValue(i, j) - M2.getValue(i, j) + M3.getValue(i, j) + M6.getValue(i, j));
-            }
-        }
-
-        return C;
-    }
-
-
-
-
-};
-
-
-
+}
 
 int main() {
-    ComplexMatrix m1(2, 2);
-    ComplexMatrix m2(2, 2);
+    // Example of complex matrix
+    Matrix A = {
+        {Complex(2, 1), Complex(3, -1)},
+        {Complex(1, 2), Complex(4, 0)}
+    };
 
-    // Заповнюємо першу матрицю
-    m1.setValue(0, 0, Complex(1, 1));
-    m1.setValue(0, 1, Complex(2, 2));
-    m1.setValue(1, 0, Complex(3, 3));
-    m1.setValue(1, 1, Complex(4, 4));
+    cout << "Original Matrix A:" << endl;
+    printMatrix(A);
 
-    // Заповнюємо другу матрицю
-    m2.setValue(0, 0, Complex(5, 5));
-    m2.setValue(0, 1, Complex(6, 6));
-    m2.setValue(1, 0, Complex(7, 7));
-    m2.setValue(1, 1, Complex(8, 8));
+    Matrix A_inv;
+    inverseMatrix(A, A_inv);
 
-    // Множимо матриці
-    ComplexMatrix result = m1.strassenMultiply(m2);
-
-    m1.print();
-    std::cout << "\n\n";
-
-    m2.print();
-    std::cout << "\n\n";
-    // Виводимо результат
-    result.print();
+    cout << "\nInverse Matrix A^-1:" << endl;
+    printMatrix(A_inv);
 
     return 0;
 }
